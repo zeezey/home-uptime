@@ -1,0 +1,3 @@
+check.sh text eol=lf
+*.yml text eol=lf
+*.txt text eol=lf

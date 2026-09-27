@@ -1,0 +1,88 @@
+name: uptime
+# Runs OFF the home network, which is the point: the nightly audit lives on the
+# same server as the sites, so a power or internet outage would silence it.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      test_alert:
+        description: 'Send a test alert and do nothing else'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test alert
+        if: ${{ inputs.test_alert }}
+        env:
+          ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
+        run: |
+          curl -fsS -H "Title: Uptime monitor test" -H "Tags: white_check_mark" \
+            -d "The outside uptime monitor can reach your phone." "$ALERT_WEBHOOK"
+          echo "sent"; exit 0
+
+      - name: Check every target
+        if: ${{ !inputs.test_alert }}
+        run: bash check.sh
+
+      # Alerts on CHANGE (down, recovered), plus an hourly reminder while
+      # anything stays down. State lives in status.txt, committed only when it
+      # changes -- the run itself always succeeds, so GitHub never emails a
+      # failed-run notice every ten minutes of an outage.
+      - name: Alert and record
+        if: ${{ !inputs.test_alert }}
+        env:
+          ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
+        run: |
+          touch status.txt
+          sort -u down.txt > now.txt
+          sort -u status.txt > was.txt
+          went_down=$(comm -13 was.txt now.txt | paste -sd ', ')
+          came_back=$(comm -23 was.txt now.txt | paste -sd ', ')
+          still=$(paste -sd ', ' now.txt)
+          send() { curl -fsS -H "Title: $1" -H "Priority: $2" -H "Tags: $3" -d "$4" "$ALERT_WEBHOOK" >/dev/null || echo "alert failed"; }
+
+          if [ -n "$went_down" ]; then
+            send "Home sites DOWN" high rotating_light "Not answering: $went_down. If everything is down at once, the house (power/internet) or Tower is the likely cause."
+          fi
+          if [ -n "$came_back" ]; then
+            send "Home sites back up" default white_check_mark "Recovered: $came_back"
+          fi
+          if [ -z "$went_down" ] && [ -n "$still" ] && [ "$(date -u +%M)" -lt 10 ]; then
+            send "Still down" high warning "Still not answering: $still"
+          fi
+
+          if ! cmp -s now.txt was.txt; then
+            cp now.txt status.txt
+            git config user.name "home-uptime"
+            git config user.email "home-uptime@users.noreply.github.com"
+            git add status.txt && git commit -qm "status: ${still:-all up}" && git push -q
+          fi
+
+      # GitHub switches off scheduled workflows in a repo with no activity for
+      # 60 days. A quiet month of all-green would do exactly that, so touch a
+      # file once every ~30 days.
+      - name: Keep the schedule alive
+        if: ${{ !inputs.test_alert }}
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt $(( 30 * 86400 )) ]; then
+            date -u +%FT%TZ > last-alive.txt
+            git config user.name "home-uptime"
+            git config user.email "home-uptime@users.noreply.github.com"
+            git pull -q --rebase || true
+            git add last-alive.txt && git commit -qm "keep-alive" && git push -q
+          fi
