@@ -65,11 +65,14 @@ jobs:
             send "Still down" high warning "Still not answering: $still"
           fi
 
-          if ! cmp -s now.txt was.txt; then
-            cp now.txt status.txt
-            git config user.name "home-uptime"
-            git config user.email "home-uptime@users.noreply.github.com"
-            git add status.txt && git commit -qm "status: ${still:-all up}" && git push -q
+          # Record what changed: the down-list, and the live-listing list the
+          # checker keeps as its fallback for when the house cannot answer.
+          cp now.txt status.txt
+          git config user.name "home-uptime"
+          git config user.email "home-uptime@users.noreply.github.com"
+          git add status.txt sites.txt
+          if ! git diff --cached --quiet; then
+            git commit -qm "status: ${still:-all up} | live: $(paste -sd ' ' sites.txt)" && git push -q
           fi
 
       # GitHub switches off scheduled workflows in a repo with no activity for

@@ -1,9 +1,6 @@
-# What the outside monitor checks. One per line: <name> <url> <text the page must contain>
-# The listing sites and the launcher all run from home; if the house loses power or
-# internet, every one of these fails at once -- which is exactly what this exists to say.
-# Add a line when a listing goes live; remove it when the listing closes.
-launcher                    https://launcher.zeezey.org/login                       Listing Launcher
-9710-e-celeste-drive        https://9710-e-celeste-drive.tucsonexperts.com/         9710 E Celeste
-4306-e-fort-lowell-road-57  https://4306-e-fort-lowell-road-57.tucsonexperts.com/   4306 E Fort Lowell
-7797-s-indian-wheat-way     https://7797-s-indian-wheat-way.tucsonexperts.com/      7797 S Indian Wheat
-10071-s-rolling-water-drive https://10071-s-rolling-water-drive.tucsonexperts.com/  10071 S Rolling Water
+# Fixed things to check. One per line: <name> <url> <text the page must contain>
+#
+# The LISTING SITES are not listed here any more: each run asks the listing
+# server which listings are live (/__sites), so publishing or retiring a
+# listing is all it takes. See check.sh.
+launcher  https://launcher.zeezey.org/login  Listing Launcher
