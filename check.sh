@@ -12,5 +12,15 @@ while read -r name url want; do
     body=$(curl -fsS --max-time 20 -A "home-uptime (github actions)" "$url" 2>/dev/null) && [[ "$body" == *"$want"* ]] && { ok=1; break; }
     [[ $attempt -lt 3 ]] && sleep 20
   done
-  if [[ $ok == 1 ]]; then echo "up    $name"; else echo "DOWN  $name  ($url)"; echo "$name" >> down.txt; fi
+  if [[ $ok == 1 ]]; then
+    echo "up    $name"
+  else
+    # Say WHY: a status code and Cloudflare's own verdict header separate "the
+    # house is down" (522/523/timeout) from "Cloudflare challenged the
+    # monitor" (403 + cf-mitigated: challenge).
+    why=$(curl -sS -o /dev/null --max-time 20 -A "home-uptime (github actions)" -D - -w 'status=%{http_code}' "$url" 2>&1 \
+      | grep -iE '^cf-mitigated|^server:|status=' | tr -d '\r' | paste -sd ' ')
+    echo "DOWN  $name  ($url)  $why"
+    echo "$name" >> down.txt
+  fi
 done < <(sed 's/  */ /g' targets.txt | awk 'NF>=3 {printf "%s %s %s", $1, $2, $3; for (i=4;i<=NF;i++) printf " %s", $i; print ""}')
