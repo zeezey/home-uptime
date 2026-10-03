@@ -28,6 +28,10 @@ live listing from the listing server's `/__sites` (last list kept as the fallbac
   IP and Workers share Cloudflare's IPs (`429 daily message quota reached`, 0 of 8 accepted). Fix it with an ntfy.sh
   account token as secret `NTFY_TOKEN` (sent as `Authorization: Bearer`), or set `DISCORD_WEBHOOK`. Until one of
   those is set, **the Worker detects outages but cannot deliver alerts** — the GitHub workflow still can.
+- **Email (the owner's choice, 2026-10-03):** secret `HC_URL` = a Healthchecks.io check's ping URL
+  (`https://hc-ping.com/<uuid>`; check period 5 min, grace 10 min). Every run pings it — plainly when all is up,
+  `/fail` with the down list when not — and Healthchecks emails on each change, and when the pings stop (the Worker
+  itself dead). Anything other than an hc-ping.com URL is ignored.
 - **Secrets** live only on Cloudflare: dashboard → Workers & Pages → `home-uptime` → Settings → Variables and
   Secrets (or `cf workers secrets update`). Secrets added there survive later deploys (tested).
 - **Test alert:** put any value under the KV key `test-alert` (`cf kv keys put test-alert --namespace-id

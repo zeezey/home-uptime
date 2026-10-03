@@ -34,6 +34,12 @@ interface Env {
 	NTFY_TOKEN?: string;
 	/** Discord webhook, used when ntfy refuses (the one Tower's Unraid notifications post to). */
 	DISCORD_WEBHOOK?: string;
+	/**
+	 * The owner's email path (2026-10-03, "just email me if it goes down"): a Healthchecks.io check's ping URL
+	 * (https://hc-ping.com/<uuid>). Every run pings it — plainly when everything is up, `/fail` with the down list when
+	 * not — and Healthchecks emails on each change (down, back up), and also when the pings stop (this Worker dead).
+	 */
+	HC_URL?: string;
 }
 
 const UA = "home-uptime (cloudflare worker)";
@@ -119,6 +125,22 @@ async function send(env: Env, a: { title: string; priority: string; tags: string
 	});
 }
 
+/** One Healthchecks ping per run (see Env.HC_URL); Healthchecks itself decides when to email. */
+async function heartbeat(env: Env, results: TargetResult[]): Promise<void> {
+	if (!env.HC_URL?.startsWith("https://hc-ping.com/")) return;
+	const down = results.filter((r) => !r.up);
+	const url = env.HC_URL.replace(/\/+$/, "") + (down.length ? "/fail" : "");
+	const body = down.length
+		? `Not answering: ${down.map((r) => `${r.name} (${r.url}) ${r.why}`).join("; ")}. If everything is down at once, the house (power/internet) or Tower is the likely cause.`
+		: `All ${results.length} up.`;
+	try {
+		const r = await fetch(url, { method: "POST", body: body.slice(0, 9000), signal: AbortSignal.timeout(TIMEOUT_MS) });
+		console.log(`healthchecks ${down.length ? "fail" : "ok"} ping: HTTP ${r.status}`);
+	} catch (e) {
+		console.log(`healthchecks ping failed: ${e}`);
+	}
+}
+
 async function readState(env: Env): Promise<State | null> {
 	try {
 		return await env.STATE.get<State>("state", "json");
@@ -147,6 +169,8 @@ async function run(env: Env): Promise<State> {
 	const targets = [...parseTargets(targetsTxt), ...siteTargets(sites)];
 	const now = new Date().toISOString();
 	const results = withSince(await Promise.all(targets.map(check)), prev?.targets ?? [], now);
+
+	await heartbeat(env, results);
 
 	const down = results.filter((r) => !r.up).map((r) => r.name);
 	const alerts = decideAlerts(down, prev?.told ?? [], prev?.remindedAt ?? null, Date.now());
