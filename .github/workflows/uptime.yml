@@ -47,9 +47,12 @@ jobs:
         env:
           ALERT_WEBHOOK: ${{ secrets.ALERT_WEBHOOK }}
         run: |
-          touch status.txt
+          touch status.txt unknown.txt
           sort -u down.txt > now.txt
           sort -u status.txt > was.txt
+          # A target that could not be checked this run (unknown.txt: DuckDNS didn't resolve, or Cloudflare
+          # challenged the runner) keeps its last state: one that was down is neither "back up" nor down afresh.
+          sort -u unknown.txt | comm -12 - was.txt | sort -u - now.txt -o now.txt
           went_down=$(comm -13 was.txt now.txt | paste -sd ', ')
           came_back=$(comm -23 was.txt now.txt | paste -sd ', ')
           still=$(paste -sd ', ' now.txt)

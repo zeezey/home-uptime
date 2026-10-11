@@ -1,3 +1,5 @@
 check.sh text eol=lf
+*.sh text eol=lf
+test/fake-bin/* text eol=lf
 *.yml text eol=lf
 *.txt text eol=lf

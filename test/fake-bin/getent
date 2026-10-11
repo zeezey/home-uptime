@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# A fake getent for check.test.sh: "resolves" zeezey.duckdns.org to $FAKE_ORIGIN_IP, or to nothing when it is empty.
+[[ -n ${FAKE_ORIGIN_IP:-} ]] && echo "$FAKE_ORIGIN_IP  STREAM zeezey.duckdns.org"
+exit 0

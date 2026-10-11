@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Check every target; write the names of the ones that are down to down.txt.
+# Check every target. Writes the names that are down to down.txt, and the names that could NOT be checked from
+# here this run to unknown.txt (the workflow keeps their last state: an unknown is neither down nor back up).
 #
 # Two sources of targets:
-#   - targets.txt: fixed things (the launcher). <name> <url> <text the page must contain>
+#   - targets.txt: fixed things (the launcher, the other products). <name> <url> <text the answer must contain>
 #   - the listing server's own /__sites: every listing with a published release.
 #     Publishing a listing adds it here and retiring one removes it -- nobody
 #     keeps a list. The last list seen is kept in sites.txt, so when the house
@@ -10,11 +11,16 @@
 #     alerts on, the sites that were live a moment ago.
 #
 # A target is down only if it fails THREE times, 20 s apart -- one dropped
-# packet should not wake anyone up.
+# packet should not wake anyone up. All targets are checked at once, so an
+# outage of every target still takes about a minute and a half, not one and a
+# half minutes per target (the job has 8).
 set -uo pipefail
 
 DOMAIN=tucsonexperts.com
+UA="home-uptime (github actions)"
+RETRY_SLEEP=${RETRY_SLEEP:-20} # seconds between tries (the tests set 0)
 : > down.txt
+: > unknown.txt
 
 # The listing sites sit behind Cloudflare with Bot Fight Mode on, which
 # challenges any datacenter -- GitHub's included -- and cannot be exempted on
@@ -22,20 +28,36 @@ DOMAIN=tucsonexperts.com
 # zeezey.duckdns.org follows), with their real hostname, and TLS still verified
 # against Cloudflare's Origin CA -- the CA that signed the origin certificate.
 # That is the failure this monitor exists for: the house or the server down.
-ORIGIN_IP=$(getent ahostsv4 zeezey.duckdns.org | awk 'NR==1 {print $1}')
-direct() { # extra curl args for a URL that must bypass Cloudflare
-  local host; host=$(sed -E 's#^https?://([^/:]+).*#\1#' <<<"$1")
-  if [[ "$host" == *."$DOMAIN" && -n "$ORIGIN_IP" ]]; then
-    echo "--resolve $host:443:$ORIGIN_IP --cacert cf-origin-ca.pem"
+#
+# If DuckDNS doesn't answer, there is no way to reach them past the challenge:
+# through Cloudflare every listing would "fail" on the challenge and look down.
+# So they are UNKNOWN this run, and the log says why.
+ORIGIN_IP=$(getent ahostsv4 zeezey.duckdns.org 2>/dev/null | awk 'NR==1 {print $1}')
+if [[ -n "$ORIGIN_IP" ]]; then
+  echo "zeezey.duckdns.org -> $ORIGIN_IP: the listing sites are checked there, directly"
+else
+  echo "zeezey.duckdns.org did not resolve: the listing sites can't be checked at the house this run;"
+  echo "  they are UNKNOWN, not down (through Cloudflare, Bot Fight Mode would challenge this runner)"
+fi
+
+host_of() { sed -E 's#^https?://([^/:]+).*#\1#' <<<"$1"; }
+at_house() { [[ "$(host_of "$1")" == *."$DOMAIN" ]]; } # a URL that must be checked at the house
+direct() { # extra curl args for such a URL
+  if at_house "$1" && [[ -n "$ORIGIN_IP" ]]; then
+    echo "--resolve $(host_of "$1"):443:$ORIGIN_IP --cacert cf-origin-ca.pem"
   fi
 }
 
 # ---- which listings are live ------------------------------------------------
 touch sites.txt
 LIST_URL="https://sites.$DOMAIN/__sites"
-# shellcheck disable=SC2046
-if live=$(curl -fsS --max-time 20 $(direct "$LIST_URL") "$LIST_URL" 2>/dev/null | jq -er '.sites[]' 2>/dev/null) || \
-   { sleep 20; live=$(curl -fsS --max-time 20 $(direct "$LIST_URL") "$LIST_URL" 2>/dev/null | jq -er '.sites[]' 2>/dev/null); }; then
+read_list() {
+  # shellcheck disable=SC2046
+  curl -fsS --max-time 20 -A "$UA" $(direct "$LIST_URL") "$LIST_URL" 2>/dev/null | jq -er '.sites[]' 2>/dev/null | tr -d '\r'
+}
+if [[ -z "$ORIGIN_IP" ]]; then
+  echo "the live list can't be read without the house's IP -- checking the last known one: $(paste -sd ' ' sites.txt)"
+elif live=$(read_list) || { sleep "$RETRY_SLEEP"; live=$(read_list); }; then
   printf '%s\n' "$live" | grep -E '^[a-z0-9-]+$' | sort -u > sites.new
   mv sites.new sites.txt
   echo "live listings: $(paste -sd ' ' sites.txt)"
@@ -51,25 +73,54 @@ fi
   while read -r slug; do [[ -n "$slug" ]] && echo "$slug https://$slug.$DOMAIN/ <title>"; done < sites.txt
 } > all-targets.txt
 
+# One target: prints "<up|down|unknown><TAB><name><TAB><detail>". $4 is a scratch-file prefix of its own.
+check_one() {
+  local name=$1 url=$2 want=$3 tmp=$4 attempt code why
+  if at_house "$url" && [[ -z "$ORIGIN_IP" ]]; then
+    printf 'unknown\t%s\t(%s) not checked: zeezey.duckdns.org did not resolve\n' "$name" "$url"
+    return
+  fi
+  for attempt in 1 2 3; do
+    : > "$tmp.h"
+    : > "$tmp.b"
+    # shellcheck disable=SC2046
+    code=$(curl -sS --max-time 20 -A "$UA" $(direct "$url") -D "$tmp.h" -o "$tmp.b" -w '%{http_code}' "$url" 2>"$tmp.e")
+    if [[ "$code" == 200 ]] && grep -qF -- "$want" "$tmp.b"; then
+      printf 'up\t%s\t\n' "$name"
+      return
+    fi
+    # Cloudflare challenged THIS runner (Bot Fight Mode, on the website's zone): that says nothing about the site.
+    if [[ "$code" == 403 ]] && grep -qiE '^cf-mitigated: *challenge' "$tmp.h"; then
+      printf 'unknown\t%s\t(%s) not checked: Cloudflare challenged the runner (cf-mitigated: challenge)\n' "$name" "$url"
+      return
+    fi
+    [[ $attempt -lt 3 ]] && sleep "$RETRY_SLEEP"
+  done
+  # Say WHY: a status code and Cloudflare's own verdict header separate "the
+  # house is down" (timeout / 5xx) from everything else.
+  why="status=$code"
+  [[ "$code" == 200 ]] && why="$why but \"$want\" is not in the answer"
+  why="$why $(grep -iE '^(cf-mitigated|server):' "$tmp.h" | tr -d '\r' | paste -sd ' ') $(head -c 200 "$tmp.e" | tr -d '\r\n')"
+  printf 'down\t%s\t(%s) %s\n' "$name" "$url" "$why"
+}
+
+work=$(mktemp -d)
+n=0
 while read -r name url want; do
   [[ -z "${name:-}" ]] && continue
-  ok=0
-  for attempt in 1 2 3; do
-    # shellcheck disable=SC2046
-    body=$(curl -fsS --max-time 20 -A "home-uptime (github actions)" $(direct "$url") "$url" 2>/dev/null) && [[ "$body" == *"$want"* ]] && { ok=1; break; }
-    [[ $attempt -lt 3 ]] && sleep 20
-  done
-  if [[ $ok == 1 ]]; then
-    echo "up    $name"
-  else
-    # Say WHY: a status code and Cloudflare's own verdict header separate "the
-    # house is down" (timeout / 5xx) from "Cloudflare challenged the monitor"
-    # (403 + cf-mitigated: challenge).
-    # shellcheck disable=SC2046
-    why=$(curl -sS -o /dev/null --max-time 20 -A "home-uptime (github actions)" $(direct "$url") -D - -w 'status=%{http_code}' "$url" 2>&1 \
-      | grep -iE '^cf-mitigated|^server:|status=' | tr -d '\r' | paste -sd ' ')
-    echo "DOWN  $name  ($url)  $why"
-    echo "$name" >> down.txt
-  fi
+  n=$((n + 1))
+  check_one "$name" "$url" "$want" "$work/$n" > "$work/$n.res" &
 done < all-targets.txt
-rm -f all-targets.txt
+wait
+
+for ((i = 1; i <= n; i++)); do
+  state='' name='' detail=''
+  IFS=$'\t' read -r state name detail < "$work/$i.res"
+  case $state in
+    up) echo "up       $name" ;;
+    down) echo "DOWN     $name  $detail"; echo "$name" >> down.txt ;;
+    unknown) echo "unknown  $name  $detail"; echo "$name" >> unknown.txt ;;
+    *) echo "unknown  (target $i: its check left no result)" ;;
+  esac
+done
+rm -rf "$work" all-targets.txt

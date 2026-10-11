@@ -1,6 +1,27 @@
-# Fixed things to check. One per line: <name> <url> <text the page must contain>
+# Fixed things to check. One per line: <name> <url> <text the answer must contain>
+# One GET each; a target is up when it answers HTTP 200 (no redirects followed) with that text in the body.
 #
-# The LISTING SITES are not listed here any more: each run asks the listing
-# server which listings are live (/__sites), so publishing or retiring a
-# listing is all it takes. See check.sh.
-launcher  https://launcher.zeezey.org/login  Listing Launcher
+# The LISTING SITES are not listed here: each run asks the listing server which listings are live (/__sites),
+# so publishing or retiring a listing is all it takes. See check.sh and worker/src/run.ts.
+#
+# Each product is checked on its own health route (the one its Dockerfile HEALTHCHECK uses, unless noted).
+launcher       https://launcher.zeezey.org/login                       Listing Launcher
+casitatolsa    https://casitatolsa.com/api/healthz                     "ok":true
+mcardapp       https://www.mcardapp.com/api/healthz                    "ok":true
+hearth-crm     https://hearth-crm.zeezey.org/api/healthz               "ok":true
+# Options Desk's deep check, built for an outside monitor: 200 only when its database, jobs, snapshot, marks,
+# backups and backup check all pass (503 otherwise). Public, no login.
+options-desk   https://desk.zeezey.org/api/system/health/deep          "ok":true
+# The website (on Vercel, not at the house): no health route, so the home page, served from Vercel's cache.
+tucsonexperts  https://tucsonexperts.com/                              Tucson Experts
+comp-helper    https://comp-helper.zeezey.org/api/healthz              "ok":true
+leads-engine   https://deal-machine-leads-gen.zeezey.org/api/healthz   "ok":true
+adtracker      https://re-adtracker.zeezey.org/api/healthz             "ok":true
+invest         https://invest.zeezey.org/api/health                    "ok":true
+project-desk   https://projects.zeezey.org/api/health                  "ok":true
+arr-home       https://arr.zeezey.org/api/health                       "ok":true
+starspoken     https://starspoken.zeezey.org/api/healthz               "ok":true
+# Its health route also reports whether the lead form is wired up ("ready"); that is a setting, not an outage,
+# so only "the app answered its health route" is checked here.
+tech2door      https://tech2door.zeezey.org/api/lead-health            "routes":
+zipline        https://i.zeezey.org/api/healthcheck                    "pass":true

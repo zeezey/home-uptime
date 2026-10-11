@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# A fake curl for check.test.sh. Answers each URL from "$FAKE_WEB/<host>": line 1 the status code, line 2 one
+# header line (or empty), the rest the body. A host with no file fails like an unreachable one (exit 7, code 000).
+# Every request is logged to $FAKE_LOG as "<url> <the --resolve value, if any>".
+hdr='' out='' fmt='' url='' resolve='' fail=0
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -D) hdr=$2; shift 2 ;;
+    -o) out=$2; shift 2 ;;
+    -w) fmt=$2; shift 2 ;;
+    --resolve) resolve=$2; shift 2 ;;
+    -A | --max-time | --cacert) shift 2 ;;
+    --*) shift ;;
+    -*) [[ $1 == *f* ]] && fail=1; shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+echo "$url $resolve" >> "$FAKE_LOG"
+host=$(sed -E 's#^https?://([^/:]+).*#\1#' <<<"$url")
+spec="$FAKE_WEB/$host"
+if [[ ! -f $spec ]]; then
+  echo "curl: (7) Failed to connect to $host port 443" >&2
+  [[ -n $fmt ]] && printf '000'
+  exit 7
+fi
+code=$(sed -n 1p "$spec")
+header=$(sed -n 2p "$spec")
+body=$(sed -n '3,$p' "$spec")
+if [[ -n $hdr ]]; then
+  { printf 'HTTP/2 %s\r\n' "$code"; [[ -n $header ]] && printf '%s\r\n' "$header"; printf '\r\n'; } > "$hdr"
+fi
+if [[ $fail == 1 && $code -ge 400 ]]; then
+  echo "curl: (22) The requested URL returned error: $code" >&2
+  exit 22
+fi
+if [[ -n $out ]]; then printf '%s' "$body" > "$out"; else printf '%s' "$body"; fi
+[[ -n $fmt ]] && printf '%s' "$code"
+exit 0
