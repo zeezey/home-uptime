@@ -14,7 +14,10 @@ hearth-crm     https://hearth-crm.zeezey.org/api/healthz               "ok":true
 options-desk   https://desk.zeezey.org/api/system/health/deep          "ok":true
 # The website (on Vercel, not at the house): no health route, so the home page, served from Vercel's cache.
 tucsonexperts  https://tucsonexperts.com/                              Tucson Experts
-comp-helper    https://comp-helper.zeezey.org/api/healthz              "ok":true
+# comp-helper's healthz is a 200 either way; it is down for us when its volume is unwritable / under 1 GB free
+# (storageOk) or a scheduled job failed or went stale (jobsOk). The route writes these two keys side by side, in
+# this order, so one text checks both without a second request.
+comp-helper    https://comp-helper.zeezey.org/api/healthz              "storageOk":true,"jobsOk":true
 leads-engine   https://deal-machine-leads-gen.zeezey.org/api/healthz   "ok":true
 adtracker      https://re-adtracker.zeezey.org/api/healthz             "ok":true
 invest         https://invest.zeezey.org/api/health                    "ok":true

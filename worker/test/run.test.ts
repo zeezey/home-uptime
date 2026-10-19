@@ -87,6 +87,7 @@ const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200 });
 function upAnswer(url: string): Response {
 	if (url.includes("/api/healthcheck")) return json({ pass: true });
 	if (url.includes("/api/lead-health")) return json({ ready: false, routes: { email: false } });
+	if (url.includes("comp-helper.")) return json({ ok: true, storage: "disk", storageOk: true, jobsOk: true, jobs: {} });
 	if (url.includes("/api/")) return json({ ok: true });
 	if (url.includes("launcher")) return html("<title>Listing Launcher</title>");
 	if (url === "https://tucsonexperts.com/") return html("<title>Tucson Experts</title>");
