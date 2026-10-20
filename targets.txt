@@ -28,3 +28,4 @@ starspoken     https://starspoken.zeezey.org/api/healthz               "ok":true
 # so only "the app answered its health route" is checked here.
 tech2door      https://tech2door.zeezey.org/api/lead-health            "routes":
 zipline        https://i.zeezey.org/api/healthcheck                    "pass":true
+meal-plan      https://meals.zeezey.org/api/health                     "ok":true
