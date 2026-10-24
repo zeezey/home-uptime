@@ -82,6 +82,25 @@ expect "the workflow has the merge line" test -n "$merge"
 expect "merge: a down target that is now unknown stays down; an unknown one that was up is not down" test $? -eq 0
 rm -rf "$box"
 
+# --- the workflow's alerts: a failed alert is not recorded as told, so the next run sends it again -------------------
+# Runs the "Alert and record" step's script from `touch status.txt` to the status.txt write, with the fake curl.
+step=$(awk '/touch status.txt unknown.txt/ {on=1} on {print} /-o status.txt/ {exit}' "$repo/.github/workflows/uptime.yml" | sed -E 's/^ {10}//')
+expect "the workflow has the alert step" grep -q 'sort -u told.txt -o status.txt' <<<"$step"
+alert_run() { # <ntfy answers: up|refuses> <was> <down now>: prints status.txt afterwards
+  local b; b=$(mktemp -d)
+  mkdir -p "$b/web"
+  [[ $1 == up ]] && printf '200\n\n' > "$b/web/ntfy.example"
+  printf '%s' "$2" | tr ' ' '\n' | sed '/^$/d' > "$b/status.txt"
+  printf '%s' "$3" | tr ' ' '\n' | sed '/^$/d' > "$b/down.txt"
+  (cd "$b" && PATH="$repo/test/fake-bin:$PATH" FAKE_WEB="$b/web" FAKE_LOG="$b/requests.log" \
+    ALERT_WEBHOOK=https://ntfy.example/topic bash -e -c "$step" > /dev/null 2>&1) || echo "step failed"
+  paste -sd ' ' "$b/status.txt"
+  rm -rf "$b"
+}
+expect "alerts delivered: status.txt is the new down-list" test "$(alert_run up 'a-1 shop' 'c-3 shop')" = "c-3 shop"
+expect "DOWN alert refused: the new one is not recorded (re-sent next run)" test "$(alert_run refuses 'shop' 'c-3 shop')" = "shop"
+expect "back-up alert refused: the recovered one stays recorded (re-sent next run)" test "$(alert_run refuses 'a-1 shop' 'shop')" = "a-1 shop"
+
 echo
 if [[ $fails -gt 0 ]]; then echo "$fails failed"; exit 1; fi
 echo "all passed"

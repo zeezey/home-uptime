@@ -56,21 +56,26 @@ jobs:
           went_down=$(comm -13 was.txt now.txt | paste -sd ', ')
           came_back=$(comm -23 was.txt now.txt | paste -sd ', ')
           still=$(paste -sd ', ' now.txt)
-          send() { curl -fsS -H "Title: $1" -H "Priority: $2" -H "Tags: $3" -d "$4" "$ALERT_WEBHOOK" >/dev/null || echo "alert failed"; }
+          send() { curl -fsS -H "Title: $1" -H "Priority: $2" -H "Tags: $3" -d "$4" "$ALERT_WEBHOOK" >/dev/null || { echo "alert failed: $1"; return 1; }; }
 
+          # status.txt is what the phone has been TOLD is down, so an alert that fails to send is sent again next
+          # run (as the Worker does) instead of being recorded as delivered and never repeated.
+          comm -12 was.txt now.txt > told.txt
           if [ -n "$went_down" ]; then
-            send "Home sites DOWN" high rotating_light "Not answering: $went_down. If everything is down at once, the house (power/internet) or Tower is the likely cause."
+            if send "Home sites DOWN" high rotating_light "Not answering: $went_down. If everything is down at once, the house (power/internet) or Tower is the likely cause."; then
+              comm -13 was.txt now.txt >> told.txt
+            fi
           fi
           if [ -n "$came_back" ]; then
-            send "Home sites back up" default white_check_mark "Recovered: $came_back"
+            send "Home sites back up" default white_check_mark "Recovered: $came_back" || comm -23 was.txt now.txt >> told.txt
           fi
           if [ -z "$went_down" ] && [ -n "$still" ] && [ "$(date -u +%M)" -lt 10 ]; then
-            send "Still down" high warning "Still not answering: $still"
+            send "Still down" high warning "Still not answering: $still" || true
           fi
+          sort -u told.txt -o status.txt
 
           # Record what changed: the down-list, and the live-listing list the
           # checker keeps as its fallback for when the house cannot answer.
-          cp now.txt status.txt
           git config user.name "home-uptime"
           git config user.email "home-uptime@users.noreply.github.com"
           git add status.txt sites.txt
