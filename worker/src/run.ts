@@ -235,11 +235,25 @@ async function heartbeat(x: Io, env: Env, results: TargetResult[]): Promise<void
 }
 
 export async function readState(kv: Kv): Promise<State | null> {
+	return (await loadState(kv)).state;
+}
+
+/**
+ * The last run's state. `readFailed`: KV itself failed (not a missing or unparsable key). The run then must not
+ * write its own state over the stored one: it would be written without the last `told` and, worse, without the last
+ * trusted listing list -- after which an empty /__sites answer would be believed and the listings no longer checked.
+ */
+async function loadState(kv: Kv): Promise<{ state: State | null; readFailed: boolean }> {
+	let raw: string | null;
 	try {
-		const raw = await kv.get("state");
-		return raw === null ? null : (JSON.parse(raw) as State);
+		raw = await kv.get("state");
 	} catch {
-		return null;
+		return { state: null, readFailed: true };
+	}
+	try {
+		return { state: raw === null ? null : (JSON.parse(raw) as State), readFailed: false };
+	} catch {
+		return { state: null, readFailed: false };
 	}
 }
 
@@ -248,9 +262,12 @@ export async function run(env: Env, targetsTxt: string, deps: Deps): Promise<Sta
 	// KV calls are kept out of the fetch budget up front (see logic.ts KV_OPS).
 	const budget = new Budget(SUBREQUEST_LIMIT - KV_OPS);
 	const x = io(budget, deps);
-	const prev = await readState(env.STATE);
+	const { state: prev, readFailed } = await loadState(env.STATE);
+	if (readFailed) x.log("KV: the last state could not be read; this run checks and alerts but does not save its state");
 
-	if ((await env.STATE.get("test-alert")) !== null) {
+	// A KV failure here must not stop the checks (it used to throw out of the whole run).
+	const testAlert = await env.STATE.get("test-alert").catch(() => null);
+	if (testAlert !== null) {
 		const ok = await send(x, env, {
 			title: "Uptime monitor test (Cloudflare)",
 			priority: "default",
@@ -258,7 +275,7 @@ export async function run(env: Env, targetsTxt: string, deps: Deps): Promise<Sta
 			body: "The Cloudflare uptime monitor can reach your phone. This is a test; nothing is down.",
 		});
 		x.log(`test alert ${ok ? "sent" : "NOT sent"}`);
-		if (ok) await env.STATE.delete("test-alert");
+		if (ok) await env.STATE.delete("test-alert").catch((e) => x.log(`KV: test-alert not deleted: ${e}`));
 	}
 
 	const answer = await liveSites(x, deps.sleep);
@@ -304,7 +321,9 @@ export async function run(env: Env, targetsTxt: string, deps: Deps): Promise<Sta
 		told: next.told,
 		remindedAt: next.remindedAt,
 	};
-	await env.STATE.put("state", JSON.stringify(state));
+	if (!readFailed) {
+		await env.STATE.put("state", JSON.stringify(state)).catch((e) => x.log(`KV: state NOT saved: ${e}`));
+	}
 	for (const r of results) {
 		const word = r.up ? "up     " : r.unknown ? "unknown" : "DOWN   ";
 		x.log(`${word}  ${r.name}${r.up ? "" : `  (${r.url})  ${r.why}`}`);

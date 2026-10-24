@@ -217,3 +217,15 @@ test("everything recovered and told: the reminder clock resets", () => {
 	const alerts = decideAlerts([], ["a"], iso(NOW - 10 * 60_000), NOW);
 	assert.deepEqual(afterAlerts(["a"], iso(NOW - 10 * 60_000), alerts, [], iso(NOW)), { told: [], remindedAt: null });
 });
+
+test("comp-helper: its real healthz answer (2026-10-24) passes, a false storageOk or jobsOk does not", () => {
+	const t = parseTargets(readFileSync(new URL("../../targets.txt", import.meta.url), "utf8")).find((x) => x.name === "comp-helper");
+	assert.ok(t);
+	const body =
+		'{"ok":true,"storage":"disk","storageOk":true,"jobsOk":true,"jobs":{},"backup":"unknown","volume":{"state":"adopted"},' +
+		'"disk":{"writable":true,"freeMb":34505,"lowSpace":false}}';
+	assert.equal(attemptOk(200, body, t.want), true);
+	assert.equal(attemptOk(200, body.replace('"storageOk":true', '"storageOk":false'), t.want), false);
+	assert.equal(attemptOk(200, body.replace('"jobsOk":true', '"jobsOk":false'), t.want), false);
+	assert.equal(attemptOk(503, body, t.want), false);
+});

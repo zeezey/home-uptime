@@ -237,3 +237,28 @@ test("an EMPTY live list keeps the last list checked, marks the source degraded,
 	assert.equal(statusBody(state).allUp, false);
 	assert.equal(statusBody(state).sitesSource, "degraded");
 });
+
+test("KV failing to read does not stop the run, and the run does not write an amnesiac state over the stored one", async () => {
+	const w = world((url, method) => (url === SITES_URL ? json({ sites: [] }) : method === "POST" ? html("ok") : upAnswer(url)), {
+		state: prevState(slugs(5)),
+	});
+	const stored = w.kv.get("state");
+	w.env.STATE.get = async () => {
+		throw new Error("KV GET failed: 503");
+	};
+	const state = await run(w.env, SMALL_TARGETS, w.deps);
+	assert.equal(state.targets.find((t) => t.name === "launcher")?.up, true, "the checks still ran");
+	assert.equal(w.kv.get("state"), stored, "the stored state (with its 5 listings) is left as it was");
+	assert.ok(w.logs.some((l) => l.includes("does not save its state")));
+});
+
+test("KV failing to write is logged, not thrown", async () => {
+	const w = world((url, method) => (url === SITES_URL ? json({ sites: slugs(5) }) : method === "POST" ? html("ok") : upAnswer(url)), {
+		state: prevState(slugs(5)),
+	});
+	w.env.STATE.put = async () => {
+		throw new Error("KV PUT failed");
+	};
+	await run(w.env, SMALL_TARGETS, w.deps);
+	assert.ok(w.logs.some((l) => l.startsWith("KV: state NOT saved")));
+});
