@@ -40,6 +40,7 @@ test("targets.txt: the launcher and every public product, each on one https heal
 			"tech2door",
 			"zipline",
 			"meal-plan",
+			"tg-bot",
 		],
 	);
 	assert.deepEqual(t[0], { name: "launcher", url: "https://launcher.zeezey.org/login", want: "Listing Launcher" });
