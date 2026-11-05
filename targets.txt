@@ -31,3 +31,4 @@ zipline        https://i.zeezey.org/api/healthcheck                    "pass":tr
 meal-plan      https://meals.zeezey.org/api/health                     "ok":true
 tg-bot         https://tg-bot.zeezey.org/api/health                    "ok":true
 tours          https://tours.zeezey.org/api/health                      "ok":true
+mailroom       https://mailroom.zeezey.org/api/health                   "ok":true
