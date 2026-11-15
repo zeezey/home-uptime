@@ -6,7 +6,12 @@
 #
 # Each product is checked on its own health route (the one its Dockerfile HEALTHCHECK uses, unless noted).
 launcher       https://launcher.zeezey.org/login                       Listing Launcher
-casitatolsa    https://casitatolsa.com/api/healthz                     "ok":true
+# Casita Tolsa's /api/health, not /healthz: 503 unless iGMS (its live calendar, prices and booking write-back)
+# answers. Its iGMS check is cached 5 minutes, so this costs iGMS at most one call per 5 minutes. On 2026-11-14 a
+# failed card had switched iGMS off for ~2 weeks and nothing outside email noticed.
+casitatolsa    https://casitatolsa.com/api/health                      "ok":true
+# The Tombstone San Jose House site (Coolify app tombstonesanjosehouse): no health route, so the home page.
+tombstone      https://tombstonesanjosehouse.com/                      Tombstone San Jose House
 mcardapp       https://www.mcardapp.com/api/healthz                    "ok":true
 hearth-crm     https://hearth-crm.zeezey.org/api/healthz               "ok":true
 # Options Desk's deep check, built for an outside monitor: 200 only when its database, jobs, snapshot, marks,

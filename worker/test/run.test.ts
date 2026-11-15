@@ -91,6 +91,7 @@ function upAnswer(url: string): Response {
 	if (url.includes("/api/")) return json({ ok: true });
 	if (url.includes("launcher")) return html("<title>Listing Launcher</title>");
 	if (url === "https://tucsonexperts.com/") return html("<title>Tucson Experts</title>");
+	if (url === "https://tombstonesanjosehouse.com/") return html("<title>Tombstone San Jose House | Historic Boarding House</title>");
 	return html("<html><title>A listing</title></html>");
 }
 

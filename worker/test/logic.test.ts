@@ -26,6 +26,7 @@ test("targets.txt: the launcher and every public product, each on one https heal
 		[
 			"launcher",
 			"casitatolsa",
+			"tombstone",
 			"mcardapp",
 			"hearth-crm",
 			"options-desk",
