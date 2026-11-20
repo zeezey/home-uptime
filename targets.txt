@@ -37,6 +37,9 @@ meal-plan      https://meals.zeezey.org/api/health                     "ok":true
 tg-bot         https://tg-bot.zeezey.org/api/health                    "ok":true
 tours          https://tours.zeezey.org/api/health                      "ok":true
 mailroom       https://mailroom.zeezey.org/api/health                   "ok":true
+# Divvi (divvi.tech; Coolify app divvi-staging, which is production despite its name): 200 only when its database
+# answers. Its Dockerfile HEALTHCHECK uses the same route.
+divvi          https://divvi.tech/api/health                            "status":"ok"
 # Umami, the self-hosted analytics for Divvi, Casita Tolsa, mcard, tech2door and AtoZ Vending (Coolify app umami).
 # One server behind four stats.* names; divvi.tech's is checked. Its Dockerfile HEALTHCHECK uses the same route.
 umami          https://stats.divvi.tech/api/heartbeat                   "ok":true
