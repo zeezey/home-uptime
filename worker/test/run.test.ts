@@ -89,6 +89,7 @@ function upAnswer(url: string): Response {
 	if (url.includes("/api/lead-health")) return json({ ready: false, routes: { email: false } });
 	if (url.includes("comp-helper.")) return json({ ok: true, storage: "disk", storageOk: true, jobsOk: true, jobs: {} });
 	if (url === "https://divvi.tech/api/health") return json({ status: "ok" });
+	if (url === "https://greencleanconnect.zeezey.org/api/health") return json({ ready: false, database: true, migrated: true });
 	if (url.includes("/api/")) return json({ ok: true });
 	if (url.includes("launcher")) return html("<title>Listing Launcher</title>");
 	if (url === "https://tucsonexperts.com/") return html("<title>Tucson Experts</title>");

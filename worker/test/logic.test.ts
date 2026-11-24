@@ -44,6 +44,7 @@ test("targets.txt: the launcher and every public product, each on one https heal
 			"tg-bot",
 			"tours",
 			"mailroom",
+			"green-clean",
 			"divvi",
 			"umami",
 		],

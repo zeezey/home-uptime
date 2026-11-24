@@ -37,6 +37,10 @@ meal-plan      https://meals.zeezey.org/api/health                     "ok":true
 tg-bot         https://tg-bot.zeezey.org/api/health                    "ok":true
 tours          https://tours.zeezey.org/api/health                      "ok":true
 mailroom       https://mailroom.zeezey.org/api/health                   "ok":true
+# Green Clean Connect (Coolify app green-clean-connect): /api/healthz is liveness only (the Dockerfile HEALTHCHECK);
+# /api/health reports settings (Stripe, email) as booleans, which are not outages, so the answer from the database
+# check is what is watched: "database":true means the app and its Postgres both answered. Added 2026-11-24.
+green-clean    https://greencleanconnect.zeezey.org/api/health          "database":true
 # Divvi (divvi.tech; Coolify app divvi-staging, which is production despite its name): 200 only when its database
 # answers. Its Dockerfile HEALTHCHECK uses the same route.
 divvi          https://divvi.tech/api/health                            "status":"ok"
